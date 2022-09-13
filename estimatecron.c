@@ -70,19 +70,8 @@ void read_estimates(char filename[])
         
 	// PRINTS COMMAND LINES
 	while(fgets(line,sizeof(line),fp) != NULL) {
-		// FILE DEBUGGING (CHECK FOR NO. OF COMMENT LINES)
-		int count = 0;
+		// FILE DEBUGGING (CHECK FOR NO. OF COMMENT LINES) 	
 		
-		if(line[0] == '#') {
-			count = count + 1;
-			printf("%d\n",count);
-
-                        if(count > 20) {
-			        fprintf(stderr,"Error: Too many comment lines in %s\n",filename);
-			        exit(EXIT_FAILURE);
-			}
-			
-		}
 		// FILE DEBUGGING (CHECK FOR NO. OF CHARACTERS IN A LINE)
 	        if(strlen(line) > 100) {
 			fprintf(stderr,"Error: Too many characters in a line in %s\n",filename);
