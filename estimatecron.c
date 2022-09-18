@@ -1,4 +1,6 @@
-// header files
+//  CITS2002 Project 1 2022
+//  Student1:   23102622   Cura   Jericho
+//  Student2:   23286189   Chin   Aaron
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,8 +11,17 @@
 #include <time.h>
 #include <stdbool.h>
 
+//GLOBAL VARIABLES
+
 #define BUFFERSIZE 10000
 #define YEAR 2022
+
+int total_commands_ran = 0;
+int nrunning = 0;
+int max_nrunning = 0;
+int max_command_value = 0;
+char max_command_value_name[40];
+
 
 void usage(char argv0[])
 {
@@ -18,15 +29,7 @@ void usage(char argv0[])
 	argv0);
 	exit(EXIT_FAILURE);
 }
-void red(){
-	printf("\033[1;31m");
-}
-void green(){
-	printf("\033[0;32m");
-}
-void reset () {
-  printf("\033[0m");
-}
+
 
 //CHECK PARAMETERS OF CRONTAB FILE
 //IF CHECK FUNCTION RETURNS 100, IT IS IMPLYING THAT THE ARGUEMENT IS A WILDCARD
@@ -197,6 +200,7 @@ struct command_args {
 	int day;
 	char command_name[40];
 	int duration;
+	int counter;
 };
 	
 struct command_args command_lines[20];
@@ -207,6 +211,7 @@ int command_count = 0; //NO. UNIQUE COMMANDS RUNNING DURING THE GIVEN MONTH
 // READ CRONTAB AND ESTIMATE FILE
 void read_file(char crontab[], char estimates[],int input_month)
 {
+	// READ CRONTAB
 	FILE *fp0 = fopen(crontab,"r");
         char line0[BUFFERSIZE];
 
@@ -235,7 +240,7 @@ void read_file(char crontab[], char estimates[],int input_month)
 			exit(EXIT_FAILURE);
 		}
 
-		// READ COMMAND LINES
+		// READ COMMAND LINES AND STORE COMMAND ARGS ONTO STRUCT COMMAND_ARGS
 		if(line0[0] != '#') {
 			char min[5], hour[5], date[5], month[5], day[5], command_name[40];
 
@@ -262,7 +267,7 @@ void read_file(char crontab[], char estimates[],int input_month)
 	
 	fclose(fp0);
 
-
+	// READ ESTIMATES FILE
 	FILE *fp1 = fopen(estimates,"r");
         char line1[BUFFERSIZE];
 
@@ -289,7 +294,7 @@ void read_file(char crontab[], char estimates[],int input_month)
 			fprintf(stderr,"Error: Too many characters in a line in %s\n",estimates);
 			exit(EXIT_FAILURE);
 		}
-		// READ COMMAND LINES
+		// READ COMMAND LINES AND STORE COMMAND DURATION ONTO THE STRUCT COMMAND_ARGS
 		if(line1[0] != '#') {
 			char command_name[40], duration[5];
 			sscanf(line1,"%s %s", command_name, duration);
@@ -304,17 +309,13 @@ void read_file(char crontab[], char estimates[],int input_month)
 		}
 	}
 
-	for(size_t i = 0; i < command_count ; i++) {
-		printf("%d %d %d %d %d %s %d\n",command_lines[i].min,command_lines[i].hour,command_lines[i].date,command_lines[i].month,command_lines[i].day,command_lines[i].command_name,command_lines[i].duration);
-	}
 
-	printf("command count is %d\n",command_count);
 
 	fclose(fp1);
 }
 
-// TEST WHETHER THE GIVEN COMMAND IS GETTING INVOKED AT THE GIVEN TIME
 
+// TEST WHETHER THE GIVEN COMMAND IS GETTING INVOKED DURING THE CURRENT TIME
 bool invoke(int cron_min,int cron_hour,int cron_date,int cron_day,int timer_min,int timer_hour,
 	int timer_date,int timer_day) {
 
@@ -331,59 +332,109 @@ bool invoke(int cron_min,int cron_hour,int cron_date,int cron_day,int timer_min,
 	return result;
 }
 
+// TEST WHETHER THE RUNNING COMMAND GETS TERMINATED DURING THE CURRENT TIME
+bool terminate(int term_min,int term_hour,int term_date,int timer_min,int timer_hour,int timer_date) {
+
+	bool result = false;
+	if(term_min == timer_min) {
+		if(term_hour == timer_hour) {
+			if(term_date == timer_date) {
+				result = true;
+			}
+		}
+	}
+	return result;
+}
+
+
+
+// STRUCT TO STORE THE TERMINATION TIME OF EACH INVOKED PROCESSES
+struct terminate_time {
+	int term_min;
+	int term_hour;
+	int term_date;
+	char command_name[40];
+};
+
+struct terminate_time terminate_times[1000];
+int terminate_size_count = 0;
+
+
+
 // START A TIMER COUTING MIN BY MIN THROUGH OUT THE MONTH
 void timer(int input_month) {
 
 	// COUNT NUM OF DAYS IN THE GIVEN MONTH
 	int days_month[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+
 	int days = 0;
 	for(int i = 0; i < 12; i++) {
 		if(input_month == i) {
 			days = days_month[i];
 		}
 	}
-
 	int weekday = first_day_of_month(input_month + 1,YEAR);
 	int mins_in_month = 1440 * days;
 
+
+	//STARTS COUNTING MIN BY MIN
 	for(int i = 0; i < mins_in_month; i++) {
 		int hr = i/60 - 24*(i/1440);
 		int min = i - 60*hr - 24*60*(i/1440);
 		int date = i/1440 + 1;
-		int pid = 0;
-		int nrunning = 0;
-		int queue = 0;
 
-		//printf("min : %d, hr : %d, date : %d, day: %d\n", min, hr, date, weekday);
-
+                // TEST EACH COMMAND NAME AND SEE IF IT GETS INVOKED AT THAT TIME
 		for(int i = 0; i < command_count; i++) {
-			if(invoke(command_lines[i].min,command_lines[i].hour,command_lines[i].date,command_lines[i].day,min,hr,date,weekday)) {
-				nrunning++;
-				queue++;
-				green();
-				printf("@%02d:%02d\tDay/%02d\tinvoke\t(pid=%d, running=%d)\t\t%s\n",hr,min,date,pid,queue,command_lines[i].command_name);
-				reset();
-			}
-		}
-			for(int i = 0; i < command_count; i++){
-				if(invoke(command_lines[i].min,command_lines[i].hour,command_lines[i].date,command_lines[i].day,min,hr,date,weekday)) {
-					int mins = min + command_lines[i].duration;
-					queue--;
-					red();
-					printf("@%02d:%02d\tDay/%02d\thas-terminated\t(pid=%d, running=%d)\t\t%s\n",hr,mins,date,pid,queue,command_lines[i].command_name);
-					reset();
+			if(invoke(command_lines[i].min,command_lines[i].hour,command_lines[i].date,
+					command_lines[i].day,min,hr,date,weekday)) { 
+	 	        	nrunning++;
+				total_commands_ran++;
+				command_lines[i].counter++;
+
+				//RECORDS THE NUMBER OF TIMES THE COMMAND HAS BEEN INVOKED
+				
+				//CALCULATE THE TIME WHEN THE INVOKED COMMANDS ENDS AND STORE IT INTO A STRUCT ARRAY
+  	 	  	        int time_of_month_in_mins = 60*hr + (date-1)*24*60 + min;	
+				int termi_time_in_mins    = time_of_month_in_mins + command_lines[i].duration;
+
+				int term_hr = termi_time_in_mins/60 - 24*(termi_time_in_mins/1440);
+				int term_min = termi_time_in_mins - 60*term_hr - 24*60*(termi_time_in_mins/1440);
+				int term_date = termi_time_in_mins/1440 + 1;
+
+				terminate_times[terminate_size_count].term_min = term_min;
+				terminate_times[terminate_size_count].term_hour = term_hr;
+				terminate_times[terminate_size_count].term_date = term_date;
+				strcpy(terminate_times[terminate_size_count].command_name, command_lines[i].command_name);
+
+				terminate_size_count++;
+
+				// STORES THE MAXIMUM NUMBER OF COMMANDS RUNNING SIMULTANEOUES
+				if(nrunning > max_nrunning && max_nrunning < 20) {
+					max_nrunning = nrunning;
 				}
 			}
-         	
+
+
+			if(command_lines[i].counter > max_command_value) {
+           			 max_command_value = command_lines[i].counter;
+		                 strcpy(max_command_value_name, command_lines[i].command_name);
+			}
+		}	
+         
+		for(int i = 0; i < terminate_size_count; i++) {
+			if(terminate(terminate_times[i].term_min,terminate_times[i].term_hour,terminate_times[i].term_date,min,hr,date)) { 
+				nrunning--;
+
+			}
+		}
+
 		if(min == 59 && hr == 23) {
 			weekday = weekday + 1;
 			if(weekday > 6) {
 				weekday = 0;
 			}
-		}
-
+		}		
 	}
-
 }
 
 
@@ -439,15 +490,13 @@ int main(int argc, char *argv[])
 	}
 
 	int int_month = check_valid_month(argv[1]);  // Jan = 0, Feb = 1, Mar = 2,..... , Dec = 11
-	printf("month is %d\n",int_month);
-
-
-	printf("\n");
-	printf("Running program...\n");
-	printf("\n");
 
 	read_file(argv[2],argv[3],int_month);
+
 	timer(int_month);
+
+	printf("%s %d %d\n",max_command_value_name,total_commands_ran,max_nrunning);
+
 
 	return EXIT_SUCCESS;
 }
